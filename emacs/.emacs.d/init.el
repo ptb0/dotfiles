@@ -15,7 +15,6 @@ apps are not started from a shell."
 						    ))))
     (setenv "PATH" path-from-shell)
     (setq exec-path (split-string path-from-shell path-separator))))
-
 (set-exec-path-from-shell-PATH)
 
 ;; put all emacs generated mods in this file
@@ -29,49 +28,31 @@ apps are not started from a shell."
   (set-face-attribute 'fixed-pitch nil :family mono-spaced-font :height 1.0)
   (set-face-attribute 'variable-pitch nil :family proportionately-spaced-font :height 1.0))
 
-(add-hook 'window-setup-hook 'toggle-frame-maximized t)
+;(add-hook 'window-setup-hook 'toggle-frame-maximized t)
 
 ;; speed
 (setq inhibit-compacting-font-caches t)
 
-;; copied from motform .emacs.d
+
+;; byte compiler warnings
+(add-to-list 'display-buffer-alist
+             '("\\`\\*\\(Warnings\\|Compile-Log\\)\\*\\'"
+               (display-buffer-no-window)
+               (allow-no-window . t)))
+
+;; locale
 (when (fboundp 'set-charset-priority)
-  (set-charset-priority 'unicode))    ; pretty
+  (set-charset-priority 'unicode))
 (set-language-environment      "UTF-8")
 (prefer-coding-system          'utf-8)
 (set-buffer-file-coding-system 'utf-8)
 (set-clipboard-coding-system   'utf-8)
-(set-default-coding-systems    'utf-8)   ; pretty
+(set-default-coding-systems    'utf-8)
 (set-file-name-coding-system   'utf-8)
 (set-keyboard-coding-system    'utf-8)
 (set-selection-coding-system   'utf-8)
 (set-terminal-coding-system    'utf-8)
-(setq locale-coding-system     'utf-8)   ; please
-
-;; setup emacs straight.el and use-package
-(defvar bootstrap-version)
-(let ((bootstrap-file
-       (expand-file-name
-        "straight/repos/straight.el/bootstrap.el"
-        (or (bound-and-true-p straight-base-dir)
-            user-emacs-directory)))
-      (bootstrap-version 7))
-  (unless (file-exists-p bootstrap-file)
-    (with-current-buffer
-        (url-retrieve-synchronously
-         "https://raw.githubusercontent.com/radian-software/straight.el/develop/install.el"
-         'silent 'inhibit-cookies)
-      (goto-char (point-max))
-      (eval-print-last-sexp)))
-  (load bootstrap-file nil 'nomessage))
-
-(straight-use-package 'use-package)
-
-;; Dont show warnings when installing packages
-(add-to-list 'display-buffer-alist
-	     '("\\`\\*\\(Warnings\\|Compile-Log\\)\\*\\'"
-	       (display-buffer-no-window)
-	       (allow-no-window . t)))
+(setq locale-coding-system     'utf-8)
 
 ;;;;;;;;;;;;;;;;;;;;;;
 ;;; emacs internals
@@ -85,23 +66,30 @@ apps are not started from a shell."
   (defalias 'yes-or-no-p 'y-or-n-p)
   (setq indent-tabs-mode nil)
   (setq mac-right-option-modifier "none")
-
   ;; hide commands in m-x which dont work in current mode
   (setq read-extended-command-predicate #'command-completion-default-include-p)
-
   :config
   (electric-pair-mode 1)
   :custom
   (tab-always-indent 'complete) ; corfu
-  (text-mode-ispell-word-completion nil)
-  (fill-column 80))
+  (text-mode-ispell-word-completion nil))
 
-(use-package modus-themes
-  :straight t
-  :ensure t
+(use-package package
+  :init
+  (package-initialize)
   :config
-  (mapc #'disable-theme custom-enabled-themes)
-  (load-theme 'modus-vivendi :no-confirm-loading))
+  (add-to-list 'package-archives '("gnu" . "https://elpa.gnu.org/packages/"))
+  (add-to-list 'package-archives '("nongnu" . "https://elpa.nongnu.org/nongnu/"))
+  (add-to-list 'package-archives '("melpa" . "https://melpa.org/packages/")))
+
+(use-package ef-themes
+  :ensure t
+  :init
+  (ef-themes-take-over-modus-themes-mode 1)
+  :config
+  (setq modus-themes-mixed-fonts t)
+  (setq modus-themes-italic-constructs t)
+  (modus-themes-load-theme 'ef-dream))
 
 (use-package dired
   :ensure nil
@@ -113,21 +101,9 @@ apps are not started from a shell."
   (setq dired-recursive-deletes 'always)
   (setq delete-by-moving-to-trash t))
 
-(use-package delsel ; delete selected text when typing
-  :ensure nil
-  :hook (after-init . delete-selection-mode))
-
-
-;;;;;;;;;;;;;;;;;
-;;; misc tools
-(use-package pdf-tools
-  :straight t
-  :ensure t
-  :pin manual
-  :mode ("\\.pdf\\'" . pdf-view-mode)
-  :config
-  (setq-default pdf-view-display-size 'fit-width)
-  (pdf-tools-install :no-query))
+;; (use-package delsel ; delete selected text when typing
+;;   :ensure nil
+;;   :hook (after-init . delete-selection-mode))
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;
@@ -135,17 +111,19 @@ apps are not started from a shell."
 (use-package eglot
   :ensure nil
   :hook
-  (c++-mode . eglot-ensure)
-  (c-mode . eglot-ensure)
-  (c-or-c++-mode . eglot-ensure)
+  (prog-mode . eglot-ensure)
+  (typst-ts-mode . eglot-ensure)
   :config
-  (add-to-list 'eglot-server-programs '((c++ c-mode) "clangd")))
+  (add-to-list 'eglot-server-programs '((c++ c-mode) "clangd"))
+  (add-to-list 'eglot-server-programs '((typst-ts-mode) . ,(eglot-alternatives
+							    `(typst-ts-lsp-download-path
+							      "tinymist"
+							      "typst-lsp")))))
 
 (with-eval-after-load 'eglot
   (setq completion-category-defaults nil))
 
 (use-package corfu
-  :straight t
   :ensure t
   :bind (:map corfu-map ("<tab>" . corfu-complete))
   :custom
@@ -164,40 +142,30 @@ apps are not started from a shell."
   (advice-add 'eglot-completion-at-point :around #'cape-wrap-buster))
 
 (use-package prog-mode
+  :ensure nil
   :hook ((prog-mode . flyspell-prog-mode)
 	 (prog-mode . completion-preview-mode)))
 
-(use-package flyspell
-  :custom
-  (setq ispell-program-name "aspell"))
-
-
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;; programming languages
-(use-package tex-mode
-  :ensure nil
-  :config
-  (tex-run-command "xetex"))
+;; (use-package tex-mode
+;;   :ensure nil
+;;   :config
+;;   (tex-run-command "xetex"))
 
 (use-package nix-mode
-  :straight t
+  :ensure nil
   :mode "\\.nix\\'")
 
 (use-package sly
-  :straight t
   :ensure t
   :custom
   (inferior-lisp-program "sbcl")
   (sly-command-switch-to-existing-lisp 'always))
 
-(use-package haskell-mode
-  :straight t)
+(use-package haskell-mode :ensure t)
 
-(use-package tidal
-  :straight t
-  :config
-  (setq tidal-boot-script-path "~/.cabal/share/aarch64-osx-ghc-9.12.2-ea3d/tidal-1.10.1")
-  (setq tidal-interpreter "/Users/ptb/.ghcup/bin/ghci"))
+(use-package typst-ts-mode :ensure t)
 
 ;;; helm
 ;; (use-package helm
@@ -206,6 +174,22 @@ apps are not started from a shell."
 ;;   (helm-mode 1))
 
 (use-package vertico
-  :straight t
+  :ensure t
   :init
   (vertico-mode))
+
+(use-package marginalia
+  :ensure t
+  :hook (after-init . marginalia-mode))
+
+(use-package orderless
+  :ensure t
+  :custom
+  (completion-styles '(orderless basic))
+  (completion-category-overrides '((file (styles partial-completion))))
+  (completion-pcm-leading-wildcard t))
+
+(use-package magit :ensure t)
+
+(use-package mmix-mode
+  :vc (:url "https://github.com/ppareit/mmix-mode"))
